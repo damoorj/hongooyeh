@@ -32,3 +32,34 @@ jobs:
           const leagues = Object.assign({}, old.leagues || {});
           const sleep = ms => new Promise(r => setTimeout(r, ms));
           (async () => {
+            for (const c of CODES) {
+              try {
+                const r = await fetch("https://api.football-data.org/v4/competitions/" + c + "/standings", { headers: { "X-Auth-Token": TOKEN } });
+                if (!r.ok) { console.error(c, "HTTP", r.status); continue; }
+                const j = await r.json();
+                const tables = (j.standings || []).filter(s => s.type === "TOTAL").map(s => ({
+                  group: s.group && s.group !== "null" && (j.standings || []).filter(x => x.type === "TOTAL").length > 1 ? String(s.group).replace(/_/g, " ") : null,
+                  rows: (s.table || []).map(t => ({
+                    pos: t.position, name: (t.team && (t.team.shortName || t.team.name)) || "", full: (t.team && t.team.name) || "",
+                    pl: t.playedGames, w: t.won, d: t.draw, l: t.lost, gf: t.goalsFor, ga: t.goalsAgainst, gd: t.goalDifference, pts: t.points
+                  }))
+                }));
+                if (tables.length) leagues[c] = { tables };
+              } catch (e) { console.error(c, String(e)); }
+              await sleep(7000);
+            }
+            const changed = JSON.stringify(old.leagues || {}) !== JSON.stringify(leagues);
+            if (changed) fs.writeFileSync("standings.json", JSON.stringify({ updated: new Date().toISOString(), leagues }));
+            console.log(changed ? "standings changed" : "no change");
+          })();
+          JS
+
+      - name: Commit if changed
+        run: |
+          if [ -n "$(git status --porcelain standings.json)" ]; then
+            git config user.name "standings-bot"
+            git config user.email "actions@users.noreply.github.com"
+            git add standings.json
+            git commit -m "Update standings"
+            git push
+          fi
