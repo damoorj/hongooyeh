@@ -56,10 +56,21 @@ jobs:
               } catch (e) { console.error(c, String(e)); }
               await sleep(7000); // سقف درخواست در دقیقه
             }
-            const changed = JSON.stringify(old.leagues || {}) !== JSON.stringify(leagues);
-            if (changed) fs.writeFileSync("standings.json", JSON.stringify({ updated: new Date().toISOString(), leagues }));
-            console.log(changed ? "standings changed" : "no change");
-          })();
+    const changed = JSON.stringify(old.leagues || {}) !== JSON.stringify(leagues);
+
+fs.writeFileSync(
+  "standings.json",
+  JSON.stringify({
+    updated: new Date().toISOString(),
+    leagues
+  })
+);
+
+console.log(
+  changed
+    ? "standings changed and timestamp updated"
+    : "no table changes; timestamp updated"
+);
           JS
 
       - name: Commit if changed
