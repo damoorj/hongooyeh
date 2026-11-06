@@ -1,31 +1,3 @@
-name: Update standings
-
-on:
-  schedule:
-    # هر ۱۰ دقیقه از ساعت ۱۴ تا ۲ بامداد ایران
-    - cron: "30,40,50 10 * * *"
-    - cron: "*/10 11-21 * * *"
-    - cron: "0,10,20 22 * * *"
-
-    # هر یک ساعت از ساعت ۲ بامداد تا ۱۴ ایران
-    - cron: "30 22,23 * * *"
-    - cron: "30 0-9 * * *"
-
-  workflow_dispatch:         # اجرای دستی از تب Actions
-
-permissions:
-  contents: write
-
-concurrency:
-  group: standings
-  cancel-in-progress: false
-
-jobs:
-  update:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-
       - name: Fetch standings
         env:
           FD_TOKEN: ${{ secrets.FD_TOKEN }}
@@ -34,51 +6,80 @@ jobs:
           const fs = require("fs");
           const TOKEN = process.env.FD_TOKEN;
           if (!TOKEN) { console.error("FD_TOKEN secret is missing"); process.exit(1); }
+
           const CODES = ["PL", "PD", "BL1", "SA", "FL1", "CL"];
           let old = { leagues: {} };
-          try { old = JSON.parse(fs.readFileSync("standings.json", "utf8")); } catch (e) {}
+
+          try {
+            old = JSON.parse(fs.readFileSync("standings.json", "utf8"));
+          } catch (e) {}
+
           const leagues = Object.assign({}, old.leagues || {});
           const sleep = ms => new Promise(r => setTimeout(r, ms));
+
           (async () => {
             for (const c of CODES) {
               try {
-                const r = await fetch("https://api.football-data.org/v4/competitions/" + c + "/standings", { headers: { "X-Auth-Token": TOKEN } });
-                if (!r.ok) { console.error(c, "HTTP", r.status); continue; }
+                const r = await fetch(
+                  "https://api.football-data.org/v4/competitions/" + c + "/standings",
+                  { headers: { "X-Auth-Token": TOKEN } }
+                );
+
+                if (!r.ok) {
+                  console.error(c, "HTTP", r.status);
+                  continue;
+                }
+
                 const j = await r.json();
-                const tables = (j.standings || []).filter(s => s.type === "TOTAL").map(s => ({
-                  group: s.group && s.group !== "null" && (j.standings || []).filter(x => x.type === "TOTAL").length > 1 ? String(s.group).replace(/_/g, " ") : null,
-                  rows: (s.table || []).map(t => ({
-                    pos: t.position, name: (t.team && (t.team.shortName || t.team.name)) || "", full: (t.team && t.team.name) || "",
-                    pl: t.playedGames, w: t.won, d: t.draw, l: t.lost, gf: t.goalsFor, ga: t.goalsAgainst, gd: t.goalDifference, pts: t.points
-                  }))
-                }));
+
+                const tables = (j.standings || [])
+                  .filter(s => s.type === "TOTAL")
+                  .map(s => ({
+                    group: s.group && s.group !== "null" &&
+                      (j.standings || []).filter(x => x.type === "TOTAL").length > 1
+                      ? String(s.group).replace(/_/g, " ")
+                      : null,
+
+                    rows: (s.table || []).map(t => ({
+                      pos: t.position,
+                      name: (t.team && (t.team.shortName || t.team.name)) || "",
+                      full: (t.team && t.team.name) || "",
+                      pl: t.playedGames,
+                      w: t.won,
+                      d: t.draw,
+                      l: t.lost,
+                      gf: t.goalsFor,
+                      ga: t.goalsAgainst,
+                      gd: t.goalDifference,
+                      pts: t.points
+                    }))
+                  }));
+
                 if (tables.length) leagues[c] = { tables };
-              } catch (e) { console.error(c, String(e)); }
-              await sleep(7000); // سقف درخواست در دقیقه
+
+              } catch (e) {
+                console.error(c, String(e));
+              }
+
+              await sleep(7000);
             }
-    const changed = JSON.stringify(old.leagues || {}) !== JSON.stringify(leagues);
 
-fs.writeFileSync(
-  "standings.json",
-  JSON.stringify({
-    updated: new Date().toISOString(),
-    leagues
-  })
-);
+            const changed =
+              JSON.stringify(old.leagues || {}) !== JSON.stringify(leagues);
 
-console.log(
-  changed
-    ? "standings changed and timestamp updated"
-    : "no table changes; timestamp updated"
-);
+            fs.writeFileSync(
+              "standings.json",
+              JSON.stringify({
+                updated: new Date().toISOString(),
+                leagues
+              })
+            );
+
+            console.log(
+              changed
+                ? "standings changed and timestamp updated"
+                : "no table changes; timestamp updated"
+            );
+
+          })();
           JS
-
-      - name: Commit if changed
-        run: |
-          if [ -n "$(git status --porcelain standings.json)" ]; then
-            git config user.name "standings-bot"
-            git config user.email "actions@users.noreply.github.com"
-            git add standings.json
-            git commit -m "Update standings"
-            git push
-          fi
