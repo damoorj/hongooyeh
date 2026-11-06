@@ -146,8 +146,12 @@ jobs:
           if [ -n "$(git status --porcelain standings.json)" ]; then
             git config user.name "standings-bot"
             git config user.email "actions@users.noreply.github.com"
+
             git add standings.json
             git commit -m "Update standings"
+
+            git pull --rebase origin "$GITHUB_REF_NAME"
+
             git push
           else
             echo "No file changes to commit"
